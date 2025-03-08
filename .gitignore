@@ -5,3 +5,5 @@ data/
 visualizations/
 .vscode/
 bin/
+results/
+combined_output.txt
