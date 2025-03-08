@@ -1,9 +1,9 @@
-# MASAMT - Memory Access Strategy Automatic Mapping Tool
+# MASAMT - Memory Access Strategy Analyzer for MT-3000
 
 *[English](README.md) | [中文](README_CN.md)*
 
 ## Project Overview
-MASAMT (Memory Access Strategy Automatic Mapping Tool) is a C++ project designed to analyze and optimize memory access patterns. This tool identifies different memory access characteristics and automatically deduces the optimal cache access strategy, including BULK, SINGLE, and DIRECT strategies.
+MASAMT (Memory Access Strategy Analyzer for MT-3000) is a C++ project designed to analyze and optimize memory access patterns for the MT-3000 platform. This tool identifies different memory access characteristics and automatically deduces the optimal cache access strategy, including BULK, SINGLE, and DIRECT strategies.
 
 ## Features
 - Automatic analysis of memory access patterns and features
