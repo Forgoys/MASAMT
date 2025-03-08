@@ -135,6 +135,7 @@ void AccessStrategyDeducter::determineParameters(std::vector<AccessFeatureVector
             line = std::max(4, std::min(line, static_cast<int>(floor(log2(featureVector.C)))));
             
             int set = std::max(1, static_cast<int>(floor(featureVector.C / (1 << line))));
+            set = static_cast<int>(floor(log2(set)));
             featureVector.accessStrategyConfig.setParm(set, line);
         }
     }
