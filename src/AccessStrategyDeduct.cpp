@@ -88,8 +88,8 @@ void AccessStrategyDeducter::calculateC(std::vector<AccessFeatureVector> &access
 void AccessStrategyDeducter::determineStrategy(std::vector<AccessFeatureVector> &accessFeatureVectors)
 {
     for (auto &featureVector : accessFeatureVectors) {
-        // 如果划分后的SM空间大小为0，则使用UNSUITABLE策略
-        if (featureVector.C == 0) {
+        // 如果空间划分因子为0，则使用UNSUITABLE策略
+        if (featureVector.F == 0) {
             featureVector.accessStrategyConfig.setStrategy(AccessStrategy::UNSUITABLE);
             continue;
         }
