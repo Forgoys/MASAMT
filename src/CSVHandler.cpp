@@ -53,6 +53,8 @@ void CSVHandler::readOperatorInfo(const std::string& opName, const std::string& 
     op.getOperatorInfoFromCSV(opName, csvPath);
 }
 
+// 修复CSVHandler.cpp中的writeAccessStrategy方法
+
 void CSVHandler::writeAccessStrategy(const std::string& opName, const std::string& dataset,
                                    const std::string& funcName, const AccessFeatureVector& featureVector) {
     // 如果不存在，创建results目录
@@ -62,17 +64,18 @@ void CSVHandler::writeAccessStrategy(const std::string& opName, const std::strin
     std::string csvFileName = "results/" + opName + ".csv";
     bool isNewFile = !fileExists(csvFileName);
     
-    // 使用wofstream实现UTF-8输出
+    // 使用wofstream实现UTF-8输出，配合二进制模式
     std::locale utf8Locale(std::locale(), new std::codecvt_utf8<wchar_t>());
     std::wofstream csvFile;
     csvFile.imbue(utf8Locale);
     
     if (isNewFile) {
-        csvFile.open(csvFileName);
+        // 以二进制模式打开，防止自动行结束符转换
+        csvFile.open(csvFileName, std::ios::binary);
         
         // 如果启用，写入UTF-8 BOM
         if (outputUTF8BOM) {
-            csvFile.put(L'\xFEFF');  // UTF-8 BOM作为宽字符
+            csvFile << L"\uFEFF";  // 使用Unicode字面量的UTF-8 BOM
         }
         
         // 写入CSV头部 - 转换为宽字符串
@@ -84,9 +87,11 @@ void CSVHandler::writeAccessStrategy(const std::string& opName, const std::strin
                 csvFile << L",";
             }
         }
-        csvFile << L"\n";
+        // 使用显式的CRLF以获得最大兼容性
+        csvFile << L"\r\n";
     } else {
-        csvFile.open(csvFileName, std::ios::app);
+        // 以追加和二进制模式打开
+        csvFile.open(csvFileName, std::ios::app | std::ios::binary);
     }
     
     // 获取并验证访存密度和空间局部性
@@ -106,9 +111,13 @@ void CSVHandler::writeAccessStrategy(const std::string& opName, const std::strin
             << std::fixed << std::setprecision(6) << locality << L","           // 访存空间局部性
             << utf8ToWide(featureVector.accessStrategyConfig.getStrategyName()) << L","  // 访存策略名
             << featureVector.accessStrategyConfig.line << L","                  // line参数
-            << featureVector.accessStrategyConfig.set                           // set参数
-            << L"\n";
+            << featureVector.accessStrategyConfig.set;                          // set参数
             
+    // 使用显式的CRLF以获得最大兼容性
+    csvFile << L"\r\n";
+    
+    // 确保所有数据都写入到文件中
+    csvFile.flush();
     csvFile.close();
 }
 

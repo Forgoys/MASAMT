@@ -13,13 +13,14 @@ AccessFeatureVector::AccessFeatureVector(const VariableInfo &var)
 
 void AccessFeatureVector::calculateL()
 {
-    if (patterns.empty()) {
-        this->L = 0.0;
-        return;
-    }
     double locality = 0.0;
     for (const auto &pattern : patterns) {
         locality += pattern.second * exp(-pattern.first);
+    }
+    // 如果无步长，则将空间局部性设置为策略决断常量，使用直接映射策略
+    if (patterns.size() == 0) {
+
+        locality = AccessStrategyDeducter::strategy_determine_factor;
     }
     this->L = locality;
 }
@@ -31,34 +32,25 @@ void AccessFeatureVector::calculateF() { this->F = L * D; }
 void AccessFeatureVector::printInfo() const
 {
     // 根据新的列顺序输出信息
-    std::cout << varName 
-              << ": 预分配=" << C 
-              << ", 大小=" << S 
-              << ", 访存=" << N << "次"
+    std::cout << varName << ": 预分配=" << C << ", 大小=" << S << ", 访存=" << N << "次"
               << ", 模式:";
-    
+
     for (const auto &pattern : patterns) {
-        std::cout << " 步长" << pattern.first << "(" << std::fixed << std::setprecision(1) << pattern.second * 100 << "%)";
+        std::cout << " 步长" << pattern.first << "(" << std::fixed << std::setprecision(1) << pattern.second * 100
+                  << "%)";
     }
-    
-    std::cout << ", 密度=" << std::fixed << std::setprecision(2) << D 
-              << ", 局部性=" << std::fixed << std::setprecision(4) << L 
-              << ", 策略=" << accessStrategyConfig.getStrategyName()
-              << ", line=" << accessStrategyConfig.line
-              << ", set=" << accessStrategyConfig.set
-              << std::endl;
+
+    std::cout << ", 密度=" << std::fixed << std::setprecision(2) << D << ", 局部性=" << std::fixed
+              << std::setprecision(4) << L << ", 策略=" << accessStrategyConfig.getStrategyName()
+              << ", line=" << accessStrategyConfig.line << ", set=" << accessStrategyConfig.set << std::endl;
 }
 
 void AccessFeatureVector::printOneLine() const
 {
     // 根据新的列顺序输出简洁的一行信息
-    std::cout << varName << " C=" << C 
-              << " S=" << S << " N=" << N 
-              << " D=" << std::fixed << std::setprecision(2) << D 
-              << " L=" << std::fixed << std::setprecision(4) << L
-              << " " << accessStrategyConfig.getStrategyName() 
-              << " line=" << accessStrategyConfig.line
-              << " set=" << accessStrategyConfig.set;
+    std::cout << varName << " C=" << C << " S=" << S << " N=" << N << " D=" << std::fixed << std::setprecision(2) << D
+              << " L=" << std::fixed << std::setprecision(4) << L << " " << accessStrategyConfig.getStrategyName()
+              << " line=" << accessStrategyConfig.line << " set=" << accessStrategyConfig.set;
 }
 
 void AccessStrategyDeducter::calculateC()
@@ -103,7 +95,13 @@ void AccessStrategyDeducter::determineStrategy(std::vector<AccessFeatureVector> 
         if (featureVector.C < featureVector.S) {
             // 如果空间局部性大于策略决断常量，则使用SINGLE策略
             if (featureVector.L > AccessStrategyDeducter::strategy_determine_factor) {
-                featureVector.accessStrategyConfig.setStrategy(AccessStrategy::SINGLE);
+                // 如果只有一个步长且步长为0，且空间局部性小于0.9，说明这个变量的访问实际上是随机的，用DIRECT策略
+                if (featureVector.patterns.size() == 1 && featureVector.patterns[0].first == 0 &&
+                    featureVector.L < 0.9) {
+                    featureVector.accessStrategyConfig.setStrategy(AccessStrategy::DIRECT);
+                } else {
+                    featureVector.accessStrategyConfig.setStrategy(AccessStrategy::SINGLE);
+                }
             } else { // 如果空间局部性小于策略决断常量，则使用DIRECT策略
                 featureVector.accessStrategyConfig.setStrategy(AccessStrategy::DIRECT);
             }
@@ -127,13 +125,13 @@ void AccessStrategyDeducter::determineParameters(std::vector<AccessFeatureVector
             for (const auto &pattern : featureVector.patterns) {
                 maxStride = std::max(maxStride, static_cast<int>(pattern.first));
             }
-            
-            // 找到最接近maxStride的2的幂的指数
-            int line = static_cast<int>(round(log2(maxStride)));
-            
+
+            // 找到最接近maxStride的2的幂的指数，这里假设数据类型长度为32字节（4Bytes）
+            int line = static_cast<int>(round(log2(maxStride))) + 2;
+
             // 限制line的范围，确保set*2^line <= C
             line = std::max(4, std::min(line, static_cast<int>(floor(log2(featureVector.C)))));
-            
+
             int set = std::max(1, static_cast<int>(floor(featureVector.C / (1 << line))));
             set = static_cast<int>(floor(log2(set)));
             featureVector.accessStrategyConfig.setParm(set, line);
