@@ -120,20 +120,27 @@ void AccessStrategyDeducter::determineParameters(std::vector<AccessFeatureVector
             // line = floor(log2(C))
             featureVector.accessStrategyConfig.setParm(0, floor(log2(featureVector.C)));
         } else if (featureVector.accessStrategyConfig.accessStrategy == AccessStrategy::DIRECT) {
+            int line, set;
             // 找出patterns中的最大步长
-            int maxStride = 1;
+            int maxStride = 0;
             for (const auto &pattern : featureVector.patterns) {
                 maxStride = std::max(maxStride, static_cast<int>(pattern.first));
             }
-
-            // 找到最接近maxStride的2的幂的指数，这里假设数据类型长度为32字节（4Bytes）
-            int line = static_cast<int>(round(log2(maxStride))) + 2;
-
+            if (maxStride == 0) { // 完全随机访问
+                // line = static_cast<int>(floor(log2(featureVector.C / 2.0)));
+                // set = 1;
+                maxStride = featureVector.D;
+                line = static_cast<int>(round(log2(maxStride)));
+            } else {
+                // 找到最接近maxStride的2的幂的指数，这里假设数据类型长度为32字节（4Bytes）
+                line = static_cast<int>(round(log2(maxStride))) + 2;
+            }
             // 限制line的范围，确保set*2^line <= C
             line = std::max(4, std::min(line, static_cast<int>(floor(log2(featureVector.C)))));
 
-            int set = std::max(1, static_cast<int>(floor(featureVector.C / (1 << line))));
+            set = std::max(1, static_cast<int>(floor(featureVector.C / (1 << line))));
             set = static_cast<int>(floor(log2(set)));
+
             featureVector.accessStrategyConfig.setParm(set, line);
         }
     }
