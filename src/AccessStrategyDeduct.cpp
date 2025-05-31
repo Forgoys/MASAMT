@@ -1,4 +1,6 @@
 #include "AccessStrategyDeduct.hpp"
+#include <cmath>
+#include <algorithm>
 
 AccessFeatureVector::AccessFeatureVector(const VariableInfo &var)
 {
@@ -15,7 +17,7 @@ void AccessFeatureVector::calculateL()
 {
     double locality = 0.0;
     for (const auto &pattern : patterns) {
-        locality += pattern.second * exp(-pattern.first);
+        locality += pattern.second * std::exp(-pattern.first);
     }
     // 如果无步长，则将空间局部性设置为策略决断常量，使用直接映射策略
     if (patterns.size() == 0) {
@@ -86,13 +88,13 @@ void AccessStrategyDeducter::determineStrategy(std::vector<AccessFeatureVector> 
             continue;
         }
         // 如果划分后的SM空间大小大于访存空间大小，则使用BULK策略
-        if (featureVector.C >= featureVector.S) {
+        if (static_cast<unsigned long long>(featureVector.C) >= featureVector.S) {
             featureVector.accessStrategyConfig.setStrategy(AccessStrategy::BULK);
             featureVector.accessStrategyConfig.setParm(0, featureVector.S);
             continue;
         }
         // 如果划分后的SM空间大小小于访存空间大小，则使用SINGLE/DIRECT策略
-        if (featureVector.C < featureVector.S) {
+        if (static_cast<unsigned long long>(featureVector.C) < featureVector.S) {
             // 如果空间局部性大于策略决断常量，则使用SINGLE策略
             if (featureVector.L > AccessStrategyDeducter::strategy_determine_factor) {
                 // 如果只有一个步长且步长为0，且空间局部性小于0.9，说明这个变量的访问实际上是随机的，用DIRECT策略
@@ -118,7 +120,7 @@ void AccessStrategyDeducter::determineParameters(std::vector<AccessFeatureVector
             featureVector.accessStrategyConfig.setParm(0, featureVector.S);
         } else if (featureVector.accessStrategyConfig.accessStrategy == AccessStrategy::SINGLE) {
             // line = floor(log2(C))
-            featureVector.accessStrategyConfig.setParm(0, floor(log2(featureVector.C)));
+            featureVector.accessStrategyConfig.setParm(0, std::floor(std::log2(featureVector.C)));
         } else if (featureVector.accessStrategyConfig.accessStrategy == AccessStrategy::DIRECT) {
             int line, set;
             // 找出patterns中的最大步长
@@ -130,16 +132,16 @@ void AccessStrategyDeducter::determineParameters(std::vector<AccessFeatureVector
                 // line = static_cast<int>(floor(log2(featureVector.C / 2.0)));
                 // set = 1;
                 maxStride = featureVector.D;
-                line = static_cast<int>(round(log2(maxStride)));
+                line = static_cast<int>(std::round(std::log2(maxStride)));
             } else {
                 // 找到最接近maxStride的2的幂的指数，这里假设数据类型长度为32字节（4Bytes）
-                line = static_cast<int>(round(log2(maxStride))) + 2;
+                line = static_cast<int>(std::round(std::log2(maxStride))) + 2;
             }
             // 限制line的范围，确保set*2^line <= C
-            line = std::max(4, std::min(line, static_cast<int>(floor(log2(featureVector.C)))));
+            line = std::max(4, std::min(line, static_cast<int>(std::floor(std::log2(featureVector.C)))));
 
-            set = std::max(1, static_cast<int>(floor(featureVector.C / (1 << line))));
-            set = static_cast<int>(floor(log2(set)));
+            set = std::max(1, static_cast<int>(std::floor(featureVector.C / (1 << line))));
+            set = static_cast<int>(std::floor(std::log2(set)));
 
             featureVector.accessStrategyConfig.setParm(set, line);
         }

@@ -2,6 +2,7 @@
 
 #include <string>
 #include <vector>
+#include <algorithm>
 
 namespace FileUtils {
     // 默认的排除文件列表

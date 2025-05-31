@@ -2,6 +2,7 @@
 #include "OperatorInfo.hpp"
 #include <cmath>
 #include <iostream>
+#include <algorithm>
 
 int test_operator_info()
 {
@@ -42,7 +43,7 @@ double calcuSpatialLocality(const std::vector<std::pair<int, double>> &patterns)
     }
     double sum = 0.0;
     for (const auto &pattern : patterns) {
-        sum += pattern.second * exp(-pattern.first);
+        sum += pattern.second * std::exp(-pattern.first);
     }
     return sum;
 }

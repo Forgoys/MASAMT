@@ -2,9 +2,11 @@
 #include <sys/stat.h>
 #include <iostream>
 #include <regex>
+#include <algorithm>
 
 #ifdef _WIN32
     #include <direct.h>
+    #include <windows.h>
     #define MKDIR(dir) _mkdir(dir)
 #else
     #include <dirent.h>

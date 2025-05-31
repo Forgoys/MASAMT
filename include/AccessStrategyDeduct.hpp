@@ -8,6 +8,8 @@
 #include <string>
 #include <vector>
 #include <iomanip>
+#include <cmath>
+#include <algorithm>
 
 enum AccessStrategy
 {
