@@ -1,5 +1,6 @@
 #include "OperatorInfo.hpp"
 #include "CSVHandler.hpp"
+#include "FileUtils.hpp"
 #include <iostream>
 #include <cmath>
 #include <fstream>
@@ -15,6 +16,7 @@ struct CLIOptions {
     bool showHeader = true;       // Show header in output
     std::string opFilter = "";    // Filter by operator name
     std::string datasetFilter = ""; // Filter by dataset name
+    std::string csvPath = "";     // Process a specific CSV file
 };
 
 // Print help message
@@ -27,6 +29,7 @@ void printHelp(const char* programName) {
               << "  -n, --no-header            Don't show headers in output\n"
               << "  -o, --operator=NAME        Process only the specified operator\n"
               << "  -d, --dataset=NAME         Process only the specified dataset\n"
+              << "  -f, --file=PATH            Process a specific CSV file\n"
               << std::endl;
 }
 
@@ -41,13 +44,14 @@ CLIOptions parseArgs(int argc, char* argv[]) {
         {"no-header", no_argument,       0, 'n'},
         {"operator",  required_argument, 0, 'o'},
         {"dataset",   required_argument, 0, 'd'},
+        {"file",      required_argument, 0, 'f'},
         {0,           0,                 0,  0 }
     };
 
     int option_index = 0;
     int c;
     
-    while ((c = getopt_long(argc, argv, "hc1no:d:", long_options, &option_index)) != -1) {
+    while ((c = getopt_long(argc, argv, "hc1no:d:f:", long_options, &option_index)) != -1) {
         switch (c) {
             case 'h':
                 printHelp(argv[0]);
@@ -68,6 +72,9 @@ CLIOptions parseArgs(int argc, char* argv[]) {
             case 'd':
                 options.datasetFilter = optarg;
                 break;
+            case 'f':
+                options.csvPath = optarg;
+                break;
             case '?':
                 printHelp(argv[0]);
                 exit(1);
@@ -76,36 +83,6 @@ CLIOptions parseArgs(int argc, char* argv[]) {
     }
     
     return options;
-}
-
-// Check if file exists
-bool fileExists(const std::string& path) {
-    struct stat buffer;
-    return (stat(path.c_str(), &buffer) == 0);
-}
-
-// Create directory
-void createDirectory(const std::string& path) {
-    mkdir(path.c_str(), 0777);
-}
-
-// Get all subdirectories in a directory
-std::vector<std::string> getSubdirectories(const std::string& path) {
-    std::vector<std::string> dirs;
-    DIR* dir = opendir(path.c_str());
-    if (dir != nullptr) {
-        struct dirent* entry;
-        while ((entry = readdir(dir)) != nullptr) {
-            if (entry->d_type == DT_DIR && 
-                std::string(entry->d_name) != "." && 
-                std::string(entry->d_name) != ".." &&
-                std::string(entry->d_name) != ".DS_Store") {
-                dirs.push_back(entry->d_name);
-            }
-        }
-        closedir(dir);
-    }
-    return dirs;
 }
 
 // Print feature vector in one line
@@ -123,15 +100,108 @@ void printFeatureVectorOneLine(const AccessFeatureVector& featureVector) {
     std::cout << std::endl;
 }
 
-int main(int argc, char *argv[]) {
-    // Parse command line arguments
-    CLIOptions options = parseArgs(argc, argv);
-
-    // Get CSV handler instance
+// Process a single CSV file
+void processCSVFile(const std::string& csvPath, const CLIOptions& options) {
     CSVHandler& csvHandler = CSVHandler::getInstance();
     
-    // Set options for CSV handler
-    csvHandler.setOutputUTF8BOM(true);
+    // Extract filename from path
+    std::string filename = csvPath.substr(csvPath.find_last_of("/\\") + 1);
+    
+    // Check if it's legacy format
+    std::string extractedDataset, extractedOpName;
+    bool isLegacy = FileUtils::isLegacyCSVFormat(filename, extractedDataset, extractedOpName);
+    
+    std::string opName;
+    std::string dataset;
+    
+    if (isLegacy) {
+        // Legacy format: use extracted information
+        opName = extractedOpName;
+        dataset = extractedDataset;
+        
+        // Check filters
+        if (!options.opFilter.empty() && options.opFilter != opName) return;
+        if (!options.datasetFilter.empty() && options.datasetFilter != dataset) return;
+        
+        if (!options.oneLineOutput && !options.toCSV) {
+            std::cout << "Processing legacy format file: " << filename << std::endl;
+            std::cout << "Extracted operator: " << opName << ", dataset: " << dataset << std::endl;
+        }
+    } else {
+        // Generic format: use filename as operator name
+        opName = FileUtils::getFileNameWithoutExtension(csvPath);
+        dataset = "UNKNOWN";
+        
+        // Check filters (only operator filter applies for generic format)
+        if (!options.opFilter.empty() && options.opFilter != opName) return;
+        
+        if (!options.oneLineOutput && !options.toCSV) {
+            std::cout << "Processing generic format file: " << filename << std::endl;
+            std::cout << "Using operator name: " << opName << std::endl;
+        }
+    }
+    
+    // Skip if CSV file doesn't exist
+    if (!csvHandler.isFileExists(csvPath)) {
+        std::cerr << "Warning: CSV file does not exist: " << csvPath << std::endl;
+        return;
+    }
+    
+    // Read operator information
+    OperatorInfo op;
+    csvHandler.readOperatorInfo(opName, csvPath, op);
+    
+    // Process each function for strategy inference
+    for (const auto& func : op.functions) {
+        if (!options.oneLineOutput && !options.toCSV) {
+            std::cout << "Processing function: " << func.name << std::endl;
+        }
+        
+        // Perform strategy inference
+        AccessStrategyDeducter deducter;
+        deducter.deductAccessStrategy(func);
+        
+        if (options.toCSV) {
+            // Write results to CSV file
+            for (const auto& featureVector : deducter.accessFeatureVectors) {
+                if (isLegacy) {
+                    csvHandler.writeAccessStrategy(opName, dataset, func.name, featureVector);
+                } else {
+                    csvHandler.writeAccessStrategyGeneric(opName, func.name, featureVector);
+                }
+            }
+        } else {
+            // Print results to terminal
+            if (options.oneLineOutput) {
+                // One-line output format
+                if (isLegacy) {
+                    std::cout << dataset << " " << opName << " " << func.name << ": \n";
+                } else {
+                    std::cout << opName << " " << func.name << ": \n";
+                }
+                
+                for (const auto& featureVector : deducter.accessFeatureVectors) {
+                    printFeatureVectorOneLine(featureVector);
+                }
+            } else {
+                // Regular output format
+                if (options.showHeader) {
+                    std::cout << "Function: " << func.name << std::endl;
+                }
+                
+                for (const auto& featureVector : deducter.accessFeatureVectors) {
+                    featureVector.printInfo();
+                }
+                
+                std::cout << std::endl;
+            }
+        }
+    }
+}
+
+// Process legacy format (original logic)
+void processLegacyFormat(const CLIOptions& options) {
+    // CSVHandler& csvHandler = CSVHandler::getInstance();
     
     // Dataset sizes
     std::vector<std::string> datasets = {"MINI", "SMALL", "STANDARD", "LARGE", "EXTRALARGE"};
@@ -141,7 +211,7 @@ int main(int argc, char *argv[]) {
     }
     
     // Process all computation loads in data directory
-    std::vector<std::string> operators = getSubdirectories("data");
+    std::vector<std::string> operators = FileUtils::getSubdirectories("data");
     if (!options.opFilter.empty()) {
         operators.clear();
         operators.push_back(options.opFilter);
@@ -155,61 +225,48 @@ int main(int argc, char *argv[]) {
         // Process each dataset size
         for (const auto& dataset : datasets) {
             std::string csvPath = "data/" + opName + "/" + dataset + "_DATASET_" + opName + ".csv";
-            
-            // Skip if CSV file doesn't exist
-            if (!csvHandler.isFileExists(csvPath)) continue;
-            
-            if (!options.oneLineOutput && !options.toCSV) {
-                std::cout << "Processing dataset: " << dataset << std::endl;
-            }
-            
-            // Read operator information
-            OperatorInfo op;
-            csvHandler.readOperatorInfo(opName, csvPath, op);
-            
-            // Process each function for strategy inference
-            for (const auto& func : op.functions) {
-                if (!options.oneLineOutput && !options.toCSV) {
-                    std::cout << "Processing function: " << func.name << std::endl;
-                }
-                
-                // Perform strategy inference
-                AccessStrategyDeducter deducter;
-                deducter.deductAccessStrategy(func);
-                
-                if (options.toCSV) {
-                    // Write results to CSV file
-                    for (const auto& featureVector : deducter.accessFeatureVectors) {
-                        csvHandler.writeAccessStrategy(opName, dataset, func.name, featureVector);
-                    }
-                } else {
-                    // Print results to terminal
-                    if (options.oneLineOutput) {
-                        // One-line output format
-                        std::cout << dataset << " " << opName << " " << func.name << ": \n";
-                        
-                        for (const auto& featureVector : deducter.accessFeatureVectors) {
-                            printFeatureVectorOneLine(featureVector);
-                        }
-                    } else {
-                        // Regular output format
-                        if (options.showHeader) {
-                            std::cout << "Function: " << func.name << std::endl;
-                        }
-                        
-                        for (const auto& featureVector : deducter.accessFeatureVectors) {
-                            featureVector.printInfo();
-                        }
-                        
-                        std::cout << std::endl;
-                    }
-                }
+            processCSVFile(csvPath, options);
+        }
+    }
+}
+
+int main(int argc, char *argv[]) {
+    // Parse command line arguments
+    CLIOptions options = parseArgs(argc, argv);
+
+    // Get CSV handler instance
+    CSVHandler& csvHandler = CSVHandler::getInstance();
+    
+    // Set options for CSV handler
+    csvHandler.setOutputUTF8BOM(true);
+    
+    if (!options.csvPath.empty()) {
+        // Process specific CSV file
+        processCSVFile(options.csvPath, options);
+    } else if (!options.opFilter.empty() || !options.datasetFilter.empty()) {
+        // Use legacy format processing when filters are specified
+        processLegacyFormat(options);
+    } else {
+        // Auto-detect and process all CSV files
+        
+        // First, try legacy format in data directory
+        if (FileUtils::fileExists("data")) {
+            processLegacyFormat(options);
+        }
+        
+        // Then, process any CSV files in current directory (generic format)
+        std::vector<std::string> csvFiles = FileUtils::getCSVFiles(".");
+        for (const auto& csvFile : csvFiles) {
+            // Skip if it matches legacy format pattern (already processed)
+            std::string extractedDataset, extractedOpName;
+            if (!FileUtils::isLegacyCSVFormat(csvFile, extractedDataset, extractedOpName)) {
+                processCSVFile(csvFile, options);
             }
         }
     }
     
     if (options.toCSV) {
-        std::cout << "\nAll computation loads processed, results saved to CSV files in the results directory." << std::endl;
+        std::cout << "\nAll CSV files processed, results saved to CSV files in the results directory." << std::endl;
     }
     
     return 0;

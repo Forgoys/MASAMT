@@ -53,10 +53,19 @@ void CSVHandler::readOperatorInfo(const std::string& opName, const std::string& 
     op.getOperatorInfoFromCSV(opName, csvPath);
 }
 
-// 修复CSVHandler.cpp中的writeAccessStrategy方法
-
 void CSVHandler::writeAccessStrategy(const std::string& opName, const std::string& dataset,
                                    const std::string& funcName, const AccessFeatureVector& featureVector) {
+    writeAccessStrategyInternal(opName, dataset, funcName, featureVector, true);
+}
+
+void CSVHandler::writeAccessStrategyGeneric(const std::string& opName, const std::string& funcName,
+                                          const AccessFeatureVector& featureVector) {
+    writeAccessStrategyInternal(opName, "", funcName, featureVector, false);
+}
+
+void CSVHandler::writeAccessStrategyInternal(const std::string& opName, const std::string& dataset,
+                                           const std::string& funcName, const AccessFeatureVector& featureVector,
+                                           bool useLegacyFormat) {
     // 如果不存在，创建results目录
     createDirectory("results");
     
@@ -69,6 +78,9 @@ void CSVHandler::writeAccessStrategy(const std::string& opName, const std::strin
     std::wofstream csvFile;
     csvFile.imbue(utf8Locale);
     
+    // 选择对应的列定义
+    const std::vector<std::string>& columns = useLegacyFormat ? legacyColumns : genericColumns;
+    
     if (isNewFile) {
         // 以二进制模式打开，防止自动行结束符转换
         csvFile.open(csvFileName, std::ios::binary);
@@ -79,11 +91,11 @@ void CSVHandler::writeAccessStrategy(const std::string& opName, const std::strin
         }
         
         // 写入CSV头部 - 转换为宽字符串
-        for (size_t i = 0; i < strategyColumns.size(); ++i) {
+        for (size_t i = 0; i < columns.size(); ++i) {
             // 从UTF-8转换为宽字符串
-            std::wstring wideColumn = utf8ToWide(strategyColumns[i]);
+            std::wstring wideColumn = utf8ToWide(columns[i]);
             csvFile << wideColumn;
-            if (i < strategyColumns.size() - 1) {
+            if (i < columns.size() - 1) {
                 csvFile << L",";
             }
         }
@@ -99,19 +111,35 @@ void CSVHandler::writeAccessStrategy(const std::string& opName, const std::strin
     double locality = featureVector.L;
     validateAndFixMetrics(density, locality);
     
-    // 按新顺序写入数据行（将字符串转换为宽字符串）
-    csvFile << utf8ToWide(dataset + "_DATASET") << L","              // 计算负载
-            << utf8ToWide(funcName) << L","                          // 核函数名
-            << utf8ToWide(featureVector.varName) << L","             // 变量名
-            << featureVector.C << L","                               // 预分配空间大小
-            << featureVector.S << L","                               // 数据块大小
-            << featureVector.N << L","                               // 访存次数
-            << utf8ToWide(buildPatternsString(featureVector.patterns)) << L","  // 访存步长和占比
-            << std::fixed << std::setprecision(6) << density << L","            // 访存密度
-            << std::fixed << std::setprecision(6) << locality << L","           // 访存空间局部性
-            << utf8ToWide(featureVector.accessStrategyConfig.getStrategyName()) << L","  // 访存策略名
-            << featureVector.accessStrategyConfig.line << L","                  // line参数
-            << featureVector.accessStrategyConfig.set;                          // set参数
+    // 根据格式写入数据行
+    if (useLegacyFormat) {
+        // 传统格式：包含计算负载列
+        csvFile << utf8ToWide(dataset + "_DATASET") << L","              // 计算负载
+                << utf8ToWide(funcName) << L","                          // 核函数名
+                << utf8ToWide(featureVector.varName) << L","             // 变量名
+                << featureVector.C << L","                               // 预分配空间大小
+                << featureVector.S << L","                               // 数据块大小
+                << featureVector.N << L","                               // 访存次数
+                << utf8ToWide(buildPatternsString(featureVector.patterns)) << L","  // 访存步长和占比
+                << std::fixed << std::setprecision(6) << density << L","            // 访存密度
+                << std::fixed << std::setprecision(6) << locality << L","           // 访存空间局部性
+                << utf8ToWide(featureVector.accessStrategyConfig.getStrategyName()) << L","  // 访存策略名
+                << featureVector.accessStrategyConfig.line << L","                  // line参数
+                << featureVector.accessStrategyConfig.set;                          // set参数
+    } else {
+        // 通用格式：不包含计算负载列
+        csvFile << utf8ToWide(funcName) << L","                          // 核函数名
+                << utf8ToWide(featureVector.varName) << L","             // 变量名
+                << featureVector.C << L","                               // 预分配空间大小
+                << featureVector.S << L","                               // 数据块大小
+                << featureVector.N << L","                               // 访存次数
+                << utf8ToWide(buildPatternsString(featureVector.patterns)) << L","  // 访存步长和占比
+                << std::fixed << std::setprecision(6) << density << L","            // 访存密度
+                << std::fixed << std::setprecision(6) << locality << L","           // 访存空间局部性
+                << utf8ToWide(featureVector.accessStrategyConfig.getStrategyName()) << L","  // 访存策略名
+                << featureVector.accessStrategyConfig.line << L","                  // line参数
+                << featureVector.accessStrategyConfig.set;                          // set参数
+    }
             
     // 使用显式的CRLF以获得最大兼容性
     csvFile << L"\r\n";

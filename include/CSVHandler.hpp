@@ -19,9 +19,13 @@ public:
     // 从CSV文件读取算子信息
     void readOperatorInfo(const std::string& opName, const std::string& csvPath, OperatorInfo& op);
 
-    // 将访存特征和策略信息写入CSV文件
+    // 将访存特征和策略信息写入CSV文件（传统格式，包含计算负载列）
     void writeAccessStrategy(const std::string& opName, const std::string& dataset,
                            const std::string& funcName, const AccessFeatureVector& featureVector);
+    
+    // 将访存特征和策略信息写入CSV文件（通用格式，不包含计算负载列）
+    void writeAccessStrategyGeneric(const std::string& opName, const std::string& funcName, 
+                                  const AccessFeatureVector& featureVector);
 
     // 检查文件是否存在
     bool isFileExists(const std::string& path);
@@ -41,13 +45,26 @@ private:
     // 创建目录
     void createDirectory(const std::string& path);
 
-    // CSV列名（新的顺序）
-    const std::vector<std::string> strategyColumns = {
+    // CSV列名（传统格式）
+    const std::vector<std::string> legacyColumns = {
         "计算负载", "核函数名", "变量名", 
         "预分配空间大小", "数据块大小", "访存次数", 
         "访存步长和占比", "访存密度", "访存空间局部性", 
         "访存策略名", "line", "set"
     };
+    
+    // CSV列名（通用格式，去掉计算负载列）
+    const std::vector<std::string> genericColumns = {
+        "核函数名", "变量名", 
+        "预分配空间大小", "数据块大小", "访存次数", 
+        "访存步长和占比", "访存密度", "访存空间局部性", 
+        "访存策略名", "line", "set"
+    };
+
+    // 通用写入函数
+    void writeAccessStrategyInternal(const std::string& opName, const std::string& dataset,
+                                   const std::string& funcName, const AccessFeatureVector& featureVector,
+                                   bool useLegacyFormat);
 
     // 构建模式字符串
     std::string buildPatternsString(const std::vector<std::pair<int, double>>& patterns);

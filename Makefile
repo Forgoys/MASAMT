@@ -11,6 +11,9 @@ BIN_DIR = bin
 SRCS = $(wildcard $(SRC_DIR)/*.cpp)
 TARGET = $(BIN_DIR)/masamt
 
+# 头文件依赖
+HEADERS = $(wildcard $(INC_DIR)/*.hpp)
+
 # 创建必要的目录
 $(shell mkdir -p $(BIN_DIR))
 
@@ -18,7 +21,7 @@ $(shell mkdir -p $(BIN_DIR))
 all: $(TARGET)
 
 # 直接编译规则
-$(TARGET): $(SRCS)
+$(TARGET): $(SRCS) $(HEADERS)
 	$(CXX) $(CXXFLAGS) $(SRCS) -o $(TARGET)
 
 # 清理规则
@@ -29,5 +32,13 @@ clean:
 run: $(TARGET)
 	./$(TARGET)
 
+# 测试特定CSV文件
+test-csv: $(TARGET)
+	./$(TARGET) -f test.csv -c
+
+# 显示帮助
+help: $(TARGET)
+	./$(TARGET) -h
+
 # 伪目标声明
-.PHONY: all clean run 
+.PHONY: all clean run test-csv help
